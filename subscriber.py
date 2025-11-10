@@ -2,6 +2,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Twist
+from std_msgs.msg import Bool
 from cv_bridge import CvBridge, CvBridgeError
 import cv2
 import numpy as np
@@ -18,6 +19,12 @@ class cameraSubscriber(Node):
         self.publisher_ = self.create_publisher(
             Twist,
             '/mavros/setpoint_velocity/cmd_vel_unstamped',
+            10
+        )
+
+        self.centralizado = self.create_publisher(
+            Bool,
+            'drone/centralizado',
             10
         )
 
@@ -56,6 +63,9 @@ class cameraSubscriber(Node):
 
         twist = Twist()
 
+        centralizado_msg = Bool()
+        centralizado_msg.data = False
+
        if contornoVermelho:
             largest2 = max(contornoVermelho, key=cv2.contourArea)
             area_r = cv2.contourArea(largest2)
@@ -74,6 +84,8 @@ class cameraSubscriber(Node):
                         twist.linear.z = -self.zIncr * dz
                         twist.angular.z = -self.yawIncr * dx
                         self.get_logger().info('Mangueira alcançada. Centralizando')
+
+                        centralizado_msg.data = True
                     else:
                         twist.linear.x = min(self.velocidade, self.xVelMax)
                         twist.linear.z = - self.zIncr * dz
@@ -124,6 +136,7 @@ class cameraSubscriber(Node):
         twist.angular.z = float(np.clip(twist.angular.z, -self.zVelAngMax, self.zVelAngMax))
 
         self.publisher_.publish(twist)
+        self.centralizado.publish(centralizado_msg)
 
 def main(args=None):
     rclpy.init(args=args)
