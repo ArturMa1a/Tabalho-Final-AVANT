@@ -2,11 +2,11 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Twist
-from cv_bridge import CvBridge
+from cv_bridge import CvBridge, CvBridgeError
 import cv2
 import numpy as np
 
-class DroneColorFollower(Node):
+class cameraSubscriber(Node):
     def __init__(self):
         super().__init__('drone_color_follower')
         self.subscription = self.create_subscription(
@@ -16,55 +16,118 @@ class DroneColorFollower(Node):
             10
         )
         self.publisher_ = self.create_publisher(
-            Twist
-  '/mavros/setpoint_velocity/cmd_vel_unstamped',
+            Twist,
+            '/mavros/setpoint_velocity/cmd_vel_unstamped',
             10
         )
+
         self.bridge = CvBridge()
-        self.get_logger().info('Drone Color Follower...')
+        self.get_logger().info('Drone iniciado.')
+
+        self.yawIncr = 0.002
+        self.zIncr = 0.002
+        self.velocidade = 0.20
+        self.min_contour_area = 200
+        self.paradaVermelho = 3000  
+        self.toleranciaCentro = 10
+        self.xVelMax = 1.0
+        self.zVelMax = 0.5
+        self.zVelAngMax = 1.0
 
  
-   def image_callback(self, msg):
-        OpenCV
+    def image_callback(self, msg: Image):
         frame = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         lower_blue = np.array([90, 50, 150])
         upper_blue = np.array([130, 255, 255])
-        mask = cv2.inRange(hsv, lower_blue, upper_blue)
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        twist = Twist ()
+        lower_red =  np.array([170, 0, 0])
+        upper_red =  np.array([255, 70, 70])
+        mascaraAzul = cv2.inRange(hsv, lower_blue, upper_blue)
+        mascaraVermelha = cv2.inRange(hsv, lower_red, upper_red)
 
-       if contours:
-            largest = max(contours, key=cv2.contourArea)
-            M = cv2.moments(largest)
-            if M['m00'] > 0:
-                cx = int(M['m10'] / M['m00'])  # centro x do objeto
-                cy = int(M['m01'] / M['m00'])  # centro y do objeto
-                img_cx = frame.shape[1] / 2
-                img_cy = frame.shape[0] / 2
-                error_x = cx - img_cx
-                twist.angular.z = -0.002 * error_x  
-                error_y = cy - img_cy
-                twist.linear.z = -0.002 * error_y  
-                twist.linear.x = 0.2
-                self.get_logger().info(
-                    f'Alvo detectado | erro_x={error_x:.1f} erro_y={error_y:.1f}'
+        kernel = np.ones((5, 5), np.uint8)
+        mascaraAzul = cv2.morphologyEx(mascaraAzul, cv2.MORPH_OPEN, kernel)
+        mascaraAzul = cv2.morphologyEx(mascaraAzul, cv2.MORPH_CLOSE, kernel)
+        mascaraVermelha = cv2.morphologyEx(mascaraVermelha, cv2.MORPH_OPEN, kernel)
+        mascaraVermelha = cv2.morphologyEx(mascaraVermelha, cv2.MORPH_CLOSE, kernel)
 
-                )
+        contornoAzul, _ = cv2.findContours(mascaraAzul, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contornoVermelho, _ = cv2.findContours(mascaraVermelha, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        twist = Twist()
+
+       if contornoVermelho:
+            largest2 = max(contornoVermelho, key=cv2.contourArea)
+            area_r = cv2.contourArea(largest2)
+            if area_r >= self.min_contour_area:
+                M = cv2.moments(largest2)
+                if M.get('m00', 0) != 0:
+                    cx = int(M['m10'] / M['m00'])
+                    cy = int(M['m01'] / M['m00'])
+                    img_cx = frame.shape[1] / 2
+                    img_cy = frame.shape[0] / 2
+                    dx = cx - img_cx
+                    dz = cy - img_cy
+
+                    if area_r >= self.paradaVermelho and abs(dx) < self.toleranciaCentro and abs(dz) < self.toleranciaCentro:
+                        twist.linear.x = 0.0
+                        twist.linear.z = -self.zIncr * dz
+                        twist.angular.z = -self.yawIncr * dx
+                        self.get_logger().info('Mangueira alcançada. Centralizando')
+                    else:
+                        twist.linear.x = min(self.velocidade, self.xVelMax)
+                        twist.linear.z = - self.zIncr * dz
+                        twist.angular.z = - self.yawIncr * dx
+                        self.get_logger().info('Mangueira detectada')
+                else:
+                    twist.linear.x = 0.0
+                    twist.linear.z = 0.0
+                    twist.angular.z = 0.0
+            else:
+                twist.linear.x = 0.0
+                twist.linear.z = 0.0
+                twist.angular.z = 0.0
+
+        elif contornoAzul:
+            largest1 = max(contornoAzul, key=cv2.contourArea)
+            area_b = cv2.contourArea(largest1)
+            if area_b >= self.min_contour_area:
+                M = cv2.moments(largest1)
+                if M.get('m00', 0) != 0:
+                    cx = int(M['m10'] / M['m00'])
+                    cy = int(M['m01'] / M['m00'])
+                    img_cx = frame.shape[1] / 2
+                    img_cy = frame.shape[0] / 2
+                    dx = cx - img_cx
+                    dz = cy - img_cy
+
+                    twist.angular.z = -self.yawIncr * dx
+                    twist.linear.z = -self.zIncr * dz
+                    twist.linear.x = self.velocidade
+                    self.get_logger().info('Seguindo linha azul')
+                else:
+                    twist.linear.x = 0.0
+                    twist.linear.z = 0.0
+                    twist.angular.z = 0.0
+            else:
+                twist.linear.x = 0.0
+                twist.linear.z = 0.0
+                twist.angular.z = 0.0
         else:
             twist.linear.x = 0.0
             twist.linear.z = 0.0
-            twist..angular.z = 0.0
-            self.get_logger().warn('Nenhum alvo detectado — parado.')
-            self.publisher_.publish(twist)
-            cv2.imshow("Frame", frame)
-            cv2.imshow("Mask", mask)
-            cv2.waitKey(1)
+            twist.angular.z = 0.0
+            self.get_logger().warn('Nenhum alvo detectado')
 
+        twist.linear.x = float(np.clip(twist.linear.x, -self.xVelMax, self.xVelMax))
+        twist.linear.z = float(np.clip(twist.linear.z, -self.zVelMax, self.zVelMax))
+        twist.angular.z = float(np.clip(twist.angular.z, -self.zVelAngMax, self.zVelAngMax))
+
+        self.publisher_.publish(twist)
 
 def main(args=None):
     rclpy.init(args=args)
-    node = DroneColorFollower()
+    node = cameraSubscriber()
     rclpy.spin(node)
     node.destroy_node()
     cv2.destroyAllWindows()
