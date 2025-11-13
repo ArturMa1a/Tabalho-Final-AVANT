@@ -66,7 +66,7 @@ class cameraSubscriber(Node):
         centralizado_msg = Bool()
         centralizado_msg.data = False
 
-       if contornoVermelho:
+        if contornoVermelho:
             largest2 = max(contornoVermelho, key=cv2.contourArea)
             area_r = cv2.contourArea(largest2)
             if area_r >= self.min_contour_area:
