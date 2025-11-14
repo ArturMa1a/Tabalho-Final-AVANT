@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
@@ -12,13 +13,13 @@ class cameraSubscriber(Node):
         super().__init__('drone_color_follower')
         self.subscription = self.create_subscription(
             Image,
-            'camera/imagem',
+            'camera/image_captured',
             self.image_callback,
             10
         )
         self.publisher_ = self.create_publisher(
             Twist,
-            '/mavros/setpoint_velocity/cmd_vel_unstamped',
+            'cmd_vel',
             10
         )
 
