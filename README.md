@@ -22,4 +22,3 @@ A pasta `/tpFinal` é o principal pacote ROS (Robot Operating System) do projeto
 
 * **ROS (Robot Operating System):** Framework principal para comunicação entre os nós.
 * **Gazebo/SITL:** Ambiente de simulação.
-    ```
