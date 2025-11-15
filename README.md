@@ -4,7 +4,7 @@ Este repositório contém o código-fonte e os arquivos de configuração do pro
 
 ## Sobre o Projeto
 
-[cite_start]O objetivo deste projeto foi desenvolver o sistema de software para um drone capaz de competir na missão "Hang the Hook"[cite: 29].
+O objetivo deste projeto foi desenvolver o sistema de software para um drone capaz de competir na missão "Hang the Hook"[cite: 29].
 
 ## Pacote Principal: `tpFinal`
 
